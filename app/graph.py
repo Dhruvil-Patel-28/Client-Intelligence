@@ -1,0 +1,175 @@
+"""
+Two-stage LangGraph pipeline for client intelligence analysis.
+
+STAGE 1 (extract_node): Raw transcript → list of ExtractedClaim objects.
+STAGE 2 (classify_node): Claims JSON only → ClientIntelligenceReport.
+
+The architectural separation ensures the classification node never sees the raw
+transcript, which structurally prevents ungrounded hallucination at synthesis time.
+"""
+
+import json
+import os
+from typing import TypedDict
+
+import anthropic
+from dotenv import load_dotenv
+from langgraph.graph import StateGraph, END
+
+from app.prompts import (
+    EXTRACTION_SYSTEM_PROMPT,
+    EXTRACTION_USER_PROMPT,
+    EXTRACTION_RETRY_PROMPT,
+    CLASSIFICATION_SYSTEM_PROMPT,
+    CLASSIFICATION_USER_PROMPT,
+    CLASSIFICATION_RETRY_PROMPT,
+)
+from app.schema import ExtractedClaim, ClientIntelligenceReport
+
+load_dotenv()
+
+# ── Anthropic client ────────────────────────────────────────────────────────
+_client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+MODEL = "claude-sonnet-4-6"
+
+
+# ── Graph state ─────────────────────────────────────────────────────────────
+class PipelineState(TypedDict):
+    transcript: str
+    claims_json: str          # serialised JSON array of claims
+    report_json: str          # serialised JSON of final report
+    error: str                # non-empty if pipeline failed
+
+
+# ── Helpers ─────────────────────────────────────────────────────────────────
+def _call_anthropic(system: str, user: str, max_tokens: int = 8192) -> str:
+    """Send a single message to the Anthropic API and return the text."""
+    response = _client.messages.create(
+        model=MODEL,
+        max_tokens=max_tokens,
+        system=system,
+        messages=[{"role": "user", "content": user}],
+    )
+    return response.content[0].text.strip()
+
+
+def _strip_json_fences(text: str) -> str:
+    """Remove markdown code fences if the model wraps its output."""
+    text = text.strip()
+    if text.startswith("```"):
+        # Remove opening fence (with optional language tag)
+        first_newline = text.index("\n")
+        text = text[first_newline + 1:]
+    if text.endswith("```"):
+        text = text[:-3]
+    return text.strip()
+
+
+# ── STAGE 1: Extraction node ───────────────────────────────────────────────
+def extract_node(state: PipelineState) -> dict:
+    """
+    Extract discrete claims from the raw transcript.
+    Returns strict JSON array of claim objects.
+    Retries once on JSON parse failure.
+    """
+    transcript = state["transcript"]
+    user_prompt = EXTRACTION_USER_PROMPT.format(transcript=transcript)
+
+    raw = _call_anthropic(EXTRACTION_SYSTEM_PROMPT, user_prompt)
+    raw = _strip_json_fences(raw)
+
+    # First parse attempt
+    try:
+        claims_data = json.loads(raw)
+        # Validate each claim against the schema
+        _ = [ExtractedClaim(**c) for c in claims_data]
+        return {"claims_json": json.dumps(claims_data, ensure_ascii=False)}
+    except (json.JSONDecodeError, Exception) as first_err:
+        pass
+
+    # ── Retry once ──────────────────────────────────────────────────────
+    retry_prompt = EXTRACTION_RETRY_PROMPT.format(error=str(first_err))
+    raw_retry = _call_anthropic(EXTRACTION_SYSTEM_PROMPT, retry_prompt)
+    raw_retry = _strip_json_fences(raw_retry)
+
+    try:
+        claims_data = json.loads(raw_retry)
+        _ = [ExtractedClaim(**c) for c in claims_data]
+        return {"claims_json": json.dumps(claims_data, ensure_ascii=False)}
+    except (json.JSONDecodeError, Exception) as second_err:
+        return {
+            "error": (
+                f"Extraction failed after retry. "
+                f"First error: {first_err}  |  Retry error: {second_err}"
+            )
+        }
+
+
+# ── STAGE 2: Classification / synthesis node ───────────────────────────────
+def classify_node(state: PipelineState) -> dict:
+    """
+    Synthesise the intelligence report from extracted claims ONLY.
+    Never receives the raw transcript — this is the structural hallucination guard.
+    Retries once on JSON parse failure.
+    """
+    # Short-circuit if extraction already failed
+    if state.get("error"):
+        return {}
+
+    claims_json = state["claims_json"]
+    user_prompt = CLASSIFICATION_USER_PROMPT.format(claims_json=claims_json)
+
+    raw = _call_anthropic(CLASSIFICATION_SYSTEM_PROMPT, user_prompt, max_tokens=8192)
+    raw = _strip_json_fences(raw)
+
+    # First parse attempt
+    try:
+        report_data = json.loads(raw)
+        # Validate against Pydantic schema
+        _ = ClientIntelligenceReport(**report_data)
+        return {"report_json": json.dumps(report_data, ensure_ascii=False)}
+    except (json.JSONDecodeError, Exception) as first_err:
+        pass
+
+    # ── Retry once ──────────────────────────────────────────────────────
+    retry_prompt = CLASSIFICATION_RETRY_PROMPT.format(error=str(first_err))
+    raw_retry = _call_anthropic(CLASSIFICATION_SYSTEM_PROMPT, retry_prompt)
+    raw_retry = _strip_json_fences(raw_retry)
+
+    try:
+        report_data = json.loads(raw_retry)
+        _ = ClientIntelligenceReport(**report_data)
+        return {"report_json": json.dumps(report_data, ensure_ascii=False)}
+    except (json.JSONDecodeError, Exception) as second_err:
+        return {
+            "error": (
+                f"Classification failed after retry. "
+                f"First error: {first_err}  |  Retry error: {second_err}"
+            )
+        }
+
+
+# ── Conditional edge: skip classify if extraction errored ───────────────────
+def _should_classify(state: PipelineState) -> str:
+    if state.get("error"):
+        return END
+    return "classify"
+
+
+# ── Build the graph ─────────────────────────────────────────────────────────
+def build_graph():
+    """Construct and compile the two-stage LangGraph pipeline."""
+    builder = StateGraph(PipelineState)
+
+    builder.add_node("extract", extract_node)
+    builder.add_node("classify", classify_node)
+
+    builder.set_entry_point("extract")
+    builder.add_conditional_edges("extract", _should_classify, {"classify": "classify", END: END})
+    builder.add_edge("classify", END)
+
+    return builder.compile()
+
+
+# Pre-compiled graph instance
+graph = build_graph()

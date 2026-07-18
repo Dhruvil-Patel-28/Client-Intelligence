@@ -1,0 +1,863 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Client Intelligence Analyzer</title>
+  <meta name="description" content="GenAI-powered client-coach transcript analysis with structural hallucination control">
+  <style>
+    /* ── Reset & Base ──────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface-hover: #22263a;
+      --border: #2a2e3e;
+      --text: #e4e6ef;
+      --text-muted: #8b8fa3;
+      --accent: #6c63ff;
+      --accent-glow: rgba(108, 99, 255, 0.15);
+
+      --green: #2ecc71;
+      --green-bg: rgba(46, 204, 113, 0.08);
+      --green-border: rgba(46, 204, 113, 0.3);
+
+      --blue: #3498db;
+      --blue-bg: rgba(52, 152, 219, 0.08);
+      --blue-border: rgba(52, 152, 219, 0.3);
+
+      --purple: #9b59b6;
+      --purple-bg: rgba(155, 89, 182, 0.08);
+      --purple-border: rgba(155, 89, 182, 0.3);
+
+      --grey: #7f8c8d;
+      --grey-bg: rgba(127, 140, 141, 0.08);
+      --grey-border: rgba(127, 140, 141, 0.3);
+
+      --red: #e74c3c;
+      --red-bg: rgba(231, 76, 60, 0.06);
+      --red-border: rgba(231, 76, 60, 0.4);
+
+      --radius: 10px;
+      --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+
+    /* ── Layout ────────────────────────────────────────────────────────── */
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 2rem 1.5rem;
+    }
+
+    /* ── Header ────────────────────────────────────────────────────────── */
+    header {
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+    header h1 {
+      font-size: 1.75rem;
+      font-weight: 700;
+      background: linear-gradient(135deg, var(--accent), #a78bfa);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 0.25rem;
+    }
+    header p {
+      color: var(--text-muted);
+      font-size: 0.85rem;
+    }
+
+    /* ── Input Section ─────────────────────────────────────────────────── */
+    .input-section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.5rem;
+      margin-bottom: 2rem;
+    }
+    .input-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.75rem;
+    }
+    .input-header label {
+      font-weight: 600;
+      font-size: 0.9rem;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 180px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 0.8rem;
+      padding: 1rem;
+      resize: vertical;
+      transition: border-color 0.2s;
+    }
+    textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-glow);
+    }
+
+    .btn-row {
+      display: flex;
+      gap: 0.75rem;
+      margin-top: 1rem;
+    }
+
+    .btn {
+      padding: 0.6rem 1.25rem;
+      border: none;
+      border-radius: 8px;
+      font-family: var(--font);
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+    }
+    .btn-primary:hover:not(:disabled) {
+      background: #5a52e0;
+      transform: translateY(-1px);
+    }
+    .btn-primary:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .btn-secondary {
+      background: var(--surface-hover);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .btn-secondary:hover {
+      background: #2e3352;
+    }
+
+    /* ── Spinner ────────────────────────────────────────────────────────── */
+    .spinner {
+      display: none;
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+    }
+    .spinner.active { display: inline-block; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Progress ───────────────────────────────────────────────────────── */
+    .progress-bar {
+      display: none;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 2rem;
+    }
+    .progress-bar.active { display: block; }
+    .progress-steps {
+      display: flex;
+      gap: 1rem;
+      align-items: center;
+    }
+    .progress-step {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      transition: color 0.3s;
+    }
+    .progress-step.active { color: var(--accent); font-weight: 600; }
+    .progress-step.done { color: var(--green); }
+    .progress-step .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--border);
+      transition: background 0.3s;
+    }
+    .progress-step.active .dot { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+    .progress-step.done .dot { background: var(--green); }
+    .progress-connector {
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    /* ── Error ──────────────────────────────────────────────────────────── */
+    .error-banner {
+      display: none;
+      background: var(--red-bg);
+      border: 1px solid var(--red-border);
+      border-left: 4px solid var(--red);
+      border-radius: var(--radius);
+      padding: 1rem 1.25rem;
+      margin-bottom: 1.5rem;
+      font-size: 0.85rem;
+      color: #f5a5a0;
+    }
+    .error-banner.active { display: block; }
+
+    /* ── Results Container ─────────────────────────────────────────────── */
+    #results { display: none; }
+    #results.active { display: block; }
+
+    /* ── Weekly Summary ────────────────────────────────────────────────── */
+    .summary-block {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.5rem;
+      margin-bottom: 2rem;
+    }
+    .summary-block h2 {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-bottom: 0.75rem;
+      color: var(--accent);
+    }
+    .summary-block p {
+      font-size: 0.9rem;
+      line-height: 1.7;
+    }
+
+    /* ── Daily Metrics Table ───────────────────────────────────────────── */
+    .daily-table-wrap {
+      overflow-x: auto;
+      margin-bottom: 2rem;
+    }
+    .daily-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.8rem;
+    }
+    .daily-table th, .daily-table td {
+      padding: 0.6rem 0.9rem;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+    .daily-table th {
+      background: var(--surface);
+      color: var(--text-muted);
+      font-weight: 600;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      position: sticky;
+      top: 0;
+    }
+    .daily-table td {
+      background: var(--surface);
+    }
+    .daily-table tr:hover td {
+      background: var(--surface-hover);
+    }
+    .null-val { color: var(--text-muted); }
+
+    /* ── Risk Flags Section ────────────────────────────────────────────── */
+    .risk-section {
+      margin-bottom: 2rem;
+    }
+    .risk-section h2 {
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--red);
+      margin-bottom: 0.75rem;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+    .risk-card {
+      background: var(--red-bg);
+      border: 1px solid var(--red-border);
+      border-left: 4px solid var(--red);
+      border-radius: var(--radius);
+      padding: 1rem 1.25rem;
+      margin-bottom: 0.75rem;
+    }
+    .risk-card .card-value {
+      font-size: 0.9rem;
+      margin-bottom: 0.5rem;
+    }
+
+    /* ── Status Sections ───────────────────────────────────────────────── */
+    .status-section {
+      margin-bottom: 2rem;
+    }
+    .status-section h2 {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-bottom: 0.75rem;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+    .status-section .section-note {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      margin-bottom: 0.75rem;
+      font-style: italic;
+    }
+
+    .section-confirmed h2 { color: var(--green); }
+    .section-client_reported h2 { color: var(--blue); }
+    .section-ai_inference h2 { color: var(--purple); }
+    .section-missing h2 { color: var(--grey); }
+
+    /* ── Cards ──────────────────────────────────────────────────────────── */
+    .card {
+      border-radius: var(--radius);
+      padding: 1rem 1.25rem;
+      margin-bottom: 0.6rem;
+      transition: transform 0.15s;
+    }
+    .card:hover { transform: translateX(3px); }
+
+    .card-confirmed {
+      background: var(--green-bg);
+      border: 1px solid var(--green-border);
+      border-left: 3px solid var(--green);
+    }
+    .card-client_reported {
+      background: var(--blue-bg);
+      border: 1px solid var(--blue-border);
+      border-left: 3px solid var(--blue);
+    }
+    .card-ai_inference {
+      background: var(--purple-bg);
+      border: 1px solid var(--purple-border);
+      border-left: 3px solid var(--purple);
+    }
+    .card-missing {
+      background: var(--grey-bg);
+      border: 1px solid var(--grey-border);
+      border-left: 3px solid var(--grey);
+    }
+
+    .card-label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--text-muted);
+      margin-bottom: 0.3rem;
+    }
+    .card-value {
+      font-size: 0.9rem;
+      margin-bottom: 0.4rem;
+    }
+    .card-evidence {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      font-style: italic;
+      margin-bottom: 0.4rem;
+    }
+    .card-confidence {
+      font-size: 0.7rem;
+      display: inline-block;
+      padding: 0.15rem 0.5rem;
+      border-radius: 20px;
+      background: rgba(255,255,255,0.05);
+      color: var(--text-muted);
+      margin-bottom: 0.5rem;
+    }
+    .confidence-high { color: var(--green); border: 1px solid var(--green-border); }
+    .confidence-medium { color: #f39c12; border: 1px solid rgba(243,156,18,0.3); }
+    .confidence-low { color: var(--red); border: 1px solid var(--red-border); }
+
+    /* ── Card Actions ──────────────────────────────────────────────────── */
+    .card-actions {
+      display: flex;
+      gap: 0.4rem;
+      margin-top: 0.3rem;
+    }
+    .card-actions button {
+      padding: 0.25rem 0.6rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: transparent;
+      color: var(--text-muted);
+      font-size: 0.72rem;
+      font-family: var(--font);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .card-actions button:hover {
+      background: var(--surface-hover);
+      color: var(--text);
+    }
+    .card-actions .btn-approve.approved {
+      background: var(--green-bg);
+      border-color: var(--green);
+      color: var(--green);
+    }
+    .card-actions .btn-reject.rejected {
+      background: var(--red-bg);
+      border-color: var(--red);
+      color: var(--red);
+    }
+
+    /* ── Inline Edit ───────────────────────────────────────────────────── */
+    .inline-edit {
+      display: none;
+      margin-top: 0.5rem;
+    }
+    .inline-edit.active { display: flex; gap: 0.4rem; }
+    .inline-edit input {
+      flex: 1;
+      padding: 0.35rem 0.6rem;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-size: 0.8rem;
+      font-family: var(--font);
+    }
+    .inline-edit input:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+    .inline-edit button {
+      padding: 0.35rem 0.7rem;
+      background: var(--accent);
+      border: none;
+      border-radius: 6px;
+      color: #fff;
+      font-size: 0.78rem;
+      font-family: var(--font);
+      cursor: pointer;
+    }
+
+    /* ── Footer ────────────────────────────────────────────────────────── */
+    footer {
+      text-align: center;
+      margin-top: 3rem;
+      padding: 1.5rem 0;
+      border-top: 1px solid var(--border);
+      color: var(--text-muted);
+      font-size: 0.75rem;
+    }
+
+    /* ── Meta Info ──────────────────────────────────────────────────────── */
+    .meta-info {
+      display: flex;
+      gap: 1.5rem;
+      margin-bottom: 1.5rem;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+    .meta-info span { display: flex; align-items: center; gap: 0.3rem; }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <!-- ── Header ──────────────────────────────────────────────────────── -->
+  <header>
+    <h1>Client Intelligence Analyzer</h1>
+    <p>GenAI-powered transcript analysis with structural hallucination control</p>
+  </header>
+
+  <!-- ── Input Section ───────────────────────────────────────────────── -->
+  <section class="input-section">
+    <div class="input-header">
+      <label for="transcript-input">Paste Transcript</label>
+      <button class="btn btn-secondary" id="btn-load-sample" onclick="loadSample()">
+        Load Sample Transcript
+      </button>
+    </div>
+    <textarea id="transcript-input" placeholder="Paste a client-coach conversation transcript here..."></textarea>
+    <div class="btn-row">
+      <button class="btn btn-primary" id="btn-analyze" onclick="analyze()">
+        <span class="spinner" id="spinner"></span>
+        Analyze Transcript
+      </button>
+    </div>
+  </section>
+
+  <!-- ── Progress Bar ────────────────────────────────────────────────── -->
+  <div class="progress-bar" id="progress-bar">
+    <div class="progress-steps">
+      <div class="progress-step" id="step-extract">
+        <span class="dot"></span> Stage 1: Extracting Claims
+      </div>
+      <div class="progress-connector"></div>
+      <div class="progress-step" id="step-classify">
+        <span class="dot"></span> Stage 2: Classifying & Synthesizing
+      </div>
+      <div class="progress-connector"></div>
+      <div class="progress-step" id="step-done">
+        <span class="dot"></span> Complete
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Error Banner ────────────────────────────────────────────────── -->
+  <div class="error-banner" id="error-banner"></div>
+
+  <!-- ── Results ─────────────────────────────────────────────────────── -->
+  <div id="results">
+    <!-- Meta Info -->
+    <div class="meta-info" id="meta-info"></div>
+
+    <!-- Weekly Summary -->
+    <div class="summary-block" id="weekly-summary"></div>
+
+    <!-- Daily Metrics Table -->
+    <div class="daily-table-wrap" id="daily-table-wrap"></div>
+
+    <!-- Risk Flags -->
+    <div class="risk-section" id="risk-flags-section"></div>
+
+    <!-- Status-Grouped Sections -->
+    <div id="status-sections"></div>
+  </div>
+
+  <footer>
+    Client Intelligence Analyzer — Prototype · Structural hallucination control via two-stage LangGraph pipeline
+  </footer>
+</div>
+
+<script>
+const API_BASE = 'http://localhost:8000';
+
+// ── Local state for card overrides ────────────────────────────────────────
+const cardStates = {};  // cardId -> { status: 'approved'|'rejected'|'edited', editedValue?: string }
+
+// ── Load Sample ───────────────────────────────────────────────────────────
+async function loadSample() {
+  const btn = document.getElementById('btn-load-sample');
+  btn.textContent = 'Loading…';
+  btn.disabled = true;
+  try {
+    const res = await fetch(`${API_BASE}/sample`);
+    if (!res.ok) throw new Error('Failed to load sample');
+    const data = await res.json();
+    document.getElementById('transcript-input').value = data.transcript;
+  } catch (err) {
+    showError('Could not load sample transcript: ' + err.message);
+  } finally {
+    btn.textContent = 'Load Sample Transcript';
+    btn.disabled = false;
+  }
+}
+
+// ── Analyze ───────────────────────────────────────────────────────────────
+async function analyze() {
+  const transcript = document.getElementById('transcript-input').value.trim();
+  if (!transcript) { showError('Please paste a transcript first.'); return; }
+
+  hideError();
+  hideResults();
+  setLoading(true);
+  showProgress('extract');
+
+  try {
+    // Simulate a brief delay for Stage 1 visual feedback
+    setTimeout(() => showProgress('classify'), 2000);
+
+    const res = await fetch(`${API_BASE}/analyze`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ transcript }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: 'Unknown error' }));
+      throw new Error(err.detail || `HTTP ${res.status}`);
+    }
+
+    showProgress('done');
+    const report = await res.json();
+    renderReport(report);
+  } catch (err) {
+    showError(err.message);
+  } finally {
+    setLoading(false);
+    setTimeout(() => {
+      document.getElementById('progress-bar').classList.remove('active');
+    }, 1500);
+  }
+}
+
+// ── Render Report ─────────────────────────────────────────────────────────
+function renderReport(report) {
+  const results = document.getElementById('results');
+
+  // Meta info
+  const metaEl = document.getElementById('meta-info');
+  metaEl.innerHTML = `
+    <span>📋 <strong>${report.client_id}</strong></span>
+    <span>📅 ${report.period_covered}</span>
+  `;
+
+  // Weekly summary
+  const summaryEl = document.getElementById('weekly-summary');
+  summaryEl.innerHTML = `<h2>Weekly Summary</h2><p>${escapeHtml(report.weekly_summary)}</p>`;
+
+  // Daily metrics table
+  renderDailyTable(report.daily_logs);
+
+  // Risk flags
+  renderRiskFlags(report.risk_flags);
+
+  // Status-grouped sections
+  renderStatusSections(report);
+
+  results.classList.add('active');
+}
+
+// ── Daily Table ───────────────────────────────────────────────────────────
+function renderDailyTable(logs) {
+  const wrap = document.getElementById('daily-table-wrap');
+  let html = `<table class="daily-table">
+    <thead><tr>
+      <th>Day</th><th>Steps</th><th>Water</th><th>Sleep (hrs)</th><th>Exercise</th>
+    </tr></thead><tbody>`;
+
+  for (const log of logs) {
+    html += `<tr>
+      <td>${escapeHtml(log.day)}</td>
+      <td>${log.steps ? escapeHtml(log.steps) : '<span class="null-val">—</span>'}</td>
+      <td>${log.water ? escapeHtml(log.water) : '<span class="null-val">—</span>'}</td>
+      <td>${log.sleep_hours ? escapeHtml(log.sleep_hours) : '<span class="null-val">—</span>'}</td>
+      <td>${log.exercise ? escapeHtml(log.exercise) : '<span class="null-val">—</span>'}</td>
+    </tr>`;
+  }
+
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+}
+
+// ── Risk Flags ────────────────────────────────────────────────────────────
+function renderRiskFlags(flags) {
+  const section = document.getElementById('risk-flags-section');
+  if (!flags || flags.length === 0) {
+    section.innerHTML = '';
+    return;
+  }
+
+  let html = '<h2>⚠ Risk Flags — Requires Coach Attention</h2>';
+  for (const flag of flags) {
+    html += `<div class="risk-card">
+      <div class="card-value">${escapeHtml(flag.value || 'No details')}</div>
+      <div class="card-evidence">${(flag.evidence || []).map(e => escapeHtml(e)).join(' · ')}</div>
+      <span class="card-confidence confidence-${flag.confidence}">${flag.confidence} confidence</span>
+    </div>`;
+  }
+  section.innerHTML = html;
+}
+
+// ── Status-Grouped Sections ──────────────────────────────────────────────
+function renderStatusSections(report) {
+  const container = document.getElementById('status-sections');
+
+  const statusConfig = {
+    confirmed_fact: {
+      title: '✓ Confirmed Facts',
+      note: null,
+      cssClass: 'section-confirmed',
+    },
+    client_reported: {
+      title: '◉ Client-Reported',
+      note: null,
+      cssClass: 'section-client_reported',
+    },
+    ai_inference: {
+      title: '◈ AI Inference — needs coach judgment',
+      note: 'These items are inferred from patterns, tone, and indirect signals. They are NOT verified facts and require coach review.',
+      cssClass: 'section-ai_inference',
+    },
+    missing: {
+      title: '○ Missing / Not Discussed',
+      note: null,
+      cssClass: 'section-missing',
+    },
+  };
+
+  // Collect all field items grouped by status
+  const grouped = { confirmed_fact: [], client_reported: [], ai_inference: [], missing: [] };
+
+  // Named fields
+  for (const [key, field] of Object.entries(report.fields || {})) {
+    const st = field.status;
+    if (grouped[st]) {
+      grouped[st].push({ label: formatLabel(key), ...field, _id: `field_${key}` });
+    }
+  }
+
+  // Key barriers
+  for (let i = 0; i < (report.key_barriers || []).length; i++) {
+    const item = report.key_barriers[i];
+    const st = item.status;
+    if (grouped[st]) {
+      grouped[st].push({ label: 'Key Barrier', ...item, _id: `barrier_${i}` });
+    }
+  }
+
+  // Pending actions
+  for (let i = 0; i < (report.pending_actions || []).length; i++) {
+    const item = report.pending_actions[i];
+    const st = item.status;
+    if (grouped[st]) {
+      grouped[st].push({ label: 'Pending Action', ...item, _id: `action_${i}` });
+    }
+  }
+
+  // Recommended next action
+  if (report.recommended_next_action) {
+    const item = report.recommended_next_action;
+    const st = item.status;
+    if (grouped[st]) {
+      grouped[st].push({ label: 'Recommended Next Action', ...item, _id: 'next_action' });
+    }
+  }
+
+  let html = '';
+  for (const [status, config] of Object.entries(statusConfig)) {
+    const items = grouped[status];
+    if (items.length === 0) continue;
+
+    html += `<section class="status-section ${config.cssClass}">
+      <h2>${config.title}</h2>`;
+    if (config.note) {
+      html += `<p class="section-note">${config.note}</p>`;
+    }
+    for (const item of items) {
+      html += renderCard(item, status);
+    }
+    html += '</section>';
+  }
+
+  container.innerHTML = html;
+}
+
+// ── Render a single card ──────────────────────────────────────────────────
+function renderCard(item, status) {
+  const id = item._id;
+  return `<div class="card card-${status}" id="card-${id}">
+    <div class="card-label">${escapeHtml(item.label)}</div>
+    <div class="card-value" id="value-${id}">${escapeHtml(item.value || 'N/A')}</div>
+    <div class="card-evidence">${(item.evidence || []).map(e => escapeHtml(e)).join(' · ')}</div>
+    <span class="card-confidence confidence-${item.confidence}">${item.confidence} confidence</span>
+    <div class="card-actions">
+      <button class="btn-approve" id="approve-${id}" onclick="approveCard('${id}')">✓ Approve</button>
+      <button class="btn-edit" onclick="toggleEdit('${id}')">✎ Edit</button>
+      <button class="btn-reject" id="reject-${id}" onclick="rejectCard('${id}')">✕ Reject</button>
+    </div>
+    <div class="inline-edit" id="edit-${id}">
+      <input type="text" id="edit-input-${id}" placeholder="Enter corrected value…">
+      <button onclick="saveEdit('${id}')">Save</button>
+    </div>
+  </div>`;
+}
+
+// ── Card Actions (local JS state only) ────────────────────────────────────
+function approveCard(id) {
+  cardStates[id] = { status: 'approved' };
+  const btn = document.getElementById(`approve-${id}`);
+  const rejectBtn = document.getElementById(`reject-${id}`);
+  btn.classList.add('approved');
+  rejectBtn.classList.remove('rejected');
+}
+
+function rejectCard(id) {
+  cardStates[id] = { status: 'rejected' };
+  const btn = document.getElementById(`reject-${id}`);
+  const approveBtn = document.getElementById(`approve-${id}`);
+  btn.classList.add('rejected');
+  approveBtn.classList.remove('approved');
+}
+
+function toggleEdit(id) {
+  const el = document.getElementById(`edit-${id}`);
+  el.classList.toggle('active');
+  if (el.classList.contains('active')) {
+    document.getElementById(`edit-input-${id}`).focus();
+  }
+}
+
+function saveEdit(id) {
+  const input = document.getElementById(`edit-input-${id}`);
+  const val = input.value.trim();
+  if (!val) return;
+  cardStates[id] = { status: 'edited', editedValue: val };
+  document.getElementById(`value-${id}`).textContent = val;
+  document.getElementById(`edit-${id}`).classList.remove('active');
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────
+function setLoading(on) {
+  const btn = document.getElementById('btn-analyze');
+  const spinner = document.getElementById('spinner');
+  btn.disabled = on;
+  spinner.classList.toggle('active', on);
+  btn.querySelector('span:not(.spinner)')
+  if (on) {
+    document.getElementById('progress-bar').classList.add('active');
+  }
+}
+
+function showProgress(stage) {
+  const steps = ['extract', 'classify', 'done'];
+  const idx = steps.indexOf(stage);
+  for (let i = 0; i < steps.length; i++) {
+    const el = document.getElementById(`step-${steps[i]}`);
+    el.classList.remove('active', 'done');
+    if (i < idx) el.classList.add('done');
+    else if (i === idx) el.classList.add('active');
+  }
+}
+
+function showError(msg) {
+  const el = document.getElementById('error-banner');
+  el.textContent = '⚠ ' + msg;
+  el.classList.add('active');
+}
+
+function hideError() {
+  document.getElementById('error-banner').classList.remove('active');
+}
+
+function hideResults() {
+  document.getElementById('results').classList.remove('active');
+}
+
+function formatLabel(key) {
+  return key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+</script>
+
+</body>
+</html>
