@@ -9,6 +9,7 @@ Endpoints:
 import json
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -38,37 +39,43 @@ class AnalyzeRequest(BaseModel):
 
 # ── POST /analyze ───────────────────────────────────────────────────────────
 @app.post("/analyze")
-async def analyze(req: AnalyzeRequest):
+def analyze(req: AnalyzeRequest):
     """
-    Run the two-stage LangGraph pipeline:
-      1. Extract discrete claims from the transcript
-      2. Classify/synthesize into a ClientIntelligenceReport
-
-    Returns the validated report JSON, or a 500 error with details.
+    Run the two-stage LangGraph pipeline and stream status updates to the frontend.
+    Yields SSE strings dynamically as each stage of the LangGraph completes.
     """
     if not req.transcript.strip():
         raise HTTPException(status_code=400, detail="Transcript cannot be empty.")
 
-    # Run the pipeline
-    result = graph.invoke({
-        "transcript": req.transcript,
-        "claims_json": "",
-        "report_json": "",
-        "error": "",
-    })
+    def event_generator():
+        yield f"data: {json.dumps({'status': 'extracting', 'message': 'Reading transcript and extracting claims...'})}\n\n"
+        
+        try:
+            for event in graph.stream(
+                {"transcript": req.transcript, "claims_json": "", "report_json": "", "error": ""}
+            ):
+                if "extract" in event:
+                    state_update = event["extract"]
+                    if state_update.get("error"):
+                        yield f"data: {json.dumps({'status': 'error', 'message': state_update['error']})}\n\n"
+                        return
+                    yield f"data: {json.dumps({'status': 'classifying', 'message': 'Claims extracted. Synthesizing final report...'})}\n\n"
+                
+                if "classify" in event:
+                    state_update = event["classify"]
+                    if state_update.get("error"):
+                        yield f"data: {json.dumps({'status': 'error', 'message': state_update['error']})}\n\n"
+                        return
+                    
+                    if not state_update.get("report_json"):
+                        yield f"data: {json.dumps({'status': 'error', 'message': 'Pipeline completed but produced no report.'})}\n\n"
+                        return
+                        
+                    yield f"data: {json.dumps({'status': 'complete', 'report_json': json.loads(state_update['report_json'])})}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'status': 'error', 'message': f'Server error: {str(e)}'})}\n\n"
 
-    # Check for pipeline errors
-    if result.get("error"):
-        raise HTTPException(status_code=500, detail=result["error"])
-
-    if not result.get("report_json"):
-        raise HTTPException(
-            status_code=500,
-            detail="Pipeline completed but produced no report.",
-        )
-
-    # Return parsed JSON (already validated by Pydantic in the pipeline)
-    return json.loads(result["report_json"])
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
 # ── GET /sample ─────────────────────────────────────────────────────────────

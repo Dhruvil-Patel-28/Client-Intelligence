@@ -21,6 +21,10 @@ The four-level status system (`confirmed_fact`, `client_reported`, `ai_inference
 - Missing data is flagged rather than silently filled
 - AI inferences carry explicit "needs judgment" warnings
 
+### Real-Time UX (SSE Streaming)
+
+The LangGraph pipeline takes several seconds to run due to the two distinct LLM calls. To prevent a frozen UI, the FastAPI backend streams progress using Server-Sent Events (SSE). By intercepting the graph execution midway, the frontend dynamically transitions from "Extracting" to "Synthesizing" to provide real-time visibility into the agentic workflow.
+
 ### Risk Flag Design
 
 Risk flags deliberately avoid clinical/diagnostic language. The model describes **observed patterns** with citations and flags them for coach attention. This prevents the AI from overstepping into clinical territory while still surfacing important patterns.

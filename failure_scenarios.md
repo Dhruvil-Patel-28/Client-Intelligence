@@ -6,7 +6,7 @@ This document catalogs the key failure modes of the Client Intelligence Analyzer
 
 ## 1. LLM Returns Invalid JSON
 
-**Scenario:** The Anthropic API returns text that is not valid JSON — e.g., markdown-fenced output, trailing commentary, or truncated responses.
+**Scenario:** The LLM API returns text that is not valid JSON — e.g., markdown-fenced output, trailing commentary, or truncated responses.
 
 **Mitigation:**
 - Both pipeline stages strip markdown code fences (```` ``` ````) before parsing.
@@ -15,7 +15,19 @@ This document catalogs the key failure modes of the Client Intelligence Analyzer
 
 ---
 
-## 2. Silent Extraction Omission (Observed)
+## 2. API Rate Limit / Model Downgrade Schema Hallucination (Observed)
+
+**Scenario:** During testing, the `llama-3.3-70b-versatile` model hit Groq's Tokens-Per-Day limit. To bypass this, the backend temporarily downgraded to `llama-3.1-8b-instant`. The smaller 8B model repeatedly hallucinated invalid categorical values for Pydantic literals (e.g., generating `client-reported` with a hyphen instead of `client_reported`). This caused validation failures and resulted in the UI generating empty "Day N" data.
+
+**Why this is severe:** A weaker model fails to follow strict taxonomy formatting instructions, breaking down the pipeline entirely rather than just degrading reasoning quality gracefully.
+
+**Mitigation added:** 
+- Added a `@field_validator(mode="before")` to `schema.py` to aggressively sanitize and map common hallucinatory variations (like hyphens instead of underscores) back to the strict `Status` taxonomy before Pydantic validation fails.
+- Reverted to `llama-3.3-70b-versatile` as the designated production model since extraction and taxonomy enforcement require >8B parameter competence.
+
+---
+
+## 3. Silent Extraction Omission (Observed)
 
 **Scenario:** The Day 7 "Accountability Coach: Tried calling you. Please update when free." line was dropped entirely during extraction on llama-3.3-70b-versatile — zero claims were produced for it, with no error, warning, or downstream signal that anything was missing.
 
@@ -25,7 +37,7 @@ This document catalogs the key failure modes of the Client Intelligence Analyzer
 
 ---
 
-## 3. Cross-Day Data Carryforward
+## 4. Cross-Day Data Carryforward
 
 **Scenario:** Day 3 reports "Sleep 5 hours" but Day 4 says nothing about sleep. The model incorrectly assumes Day 4 also had 5 hours of sleep.
 
@@ -38,7 +50,7 @@ This document catalogs the key failure modes of the Client Intelligence Analyzer
 
 ---
 
-## 4. Accountability Coach Claims Merged into Client Data
+## 5. Accountability Coach Claims Merged into Client Data
 
 **Scenario:** An "Accountability Coach" message summarizes the client's data (e.g., "Water 4 litres, Sleep 5 hours"). The model incorrectly tags this as the Client speaking.
 
@@ -48,7 +60,7 @@ This document catalogs the key failure modes of the Client Intelligence Analyzer
 
 ---
 
-## 5. Clinical Language in Risk Flags
+## 6. Clinical Language in Risk Flags
 
 **Scenario:** The model outputs risk flags using diagnostic terminology like "depression," "burnout," or "anxiety disorder."
 

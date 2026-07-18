@@ -116,10 +116,10 @@ def extract_node(state: PipelineState) -> dict:
         _check_extraction_coverage(transcript, claims_data)
         return {"claims_json": json.dumps(claims_data, ensure_ascii=False)}
     except (json.JSONDecodeError, Exception) as first_err:
-        pass
+        first_err_msg = str(first_err)
 
     # ── Retry once ──────────────────────────────────────────────────────
-    retry_prompt = EXTRACTION_RETRY_PROMPT.format(error=str(first_err))
+    retry_prompt = EXTRACTION_RETRY_PROMPT.format(error=first_err_msg)
     raw_retry = _call_llm(EXTRACTION_SYSTEM_PROMPT, retry_prompt)
     raw_retry = _strip_json_fences(raw_retry)
 
@@ -132,7 +132,7 @@ def extract_node(state: PipelineState) -> dict:
         return {
             "error": (
                 f"Extraction failed after retry. "
-                f"First error: {first_err}  |  Retry error: {second_err}"
+                f"First error: {first_err_msg}  |  Retry error: {second_err}"
             )
         }
 
@@ -151,7 +151,7 @@ def classify_node(state: PipelineState) -> dict:
     claims_json = state["claims_json"]
     user_prompt = CLASSIFICATION_USER_PROMPT.format(claims_json=claims_json)
 
-    raw = _call_llm(CLASSIFICATION_SYSTEM_PROMPT, user_prompt, max_tokens=8192)
+    raw = _call_llm(CLASSIFICATION_SYSTEM_PROMPT, user_prompt, max_tokens=2000)
     raw = _strip_json_fences(raw)
 
     # First parse attempt
@@ -161,10 +161,10 @@ def classify_node(state: PipelineState) -> dict:
         _ = ClientIntelligenceReport(**report_data)
         return {"report_json": json.dumps(report_data, ensure_ascii=False)}
     except (json.JSONDecodeError, Exception) as first_err:
-        pass
+        first_err_msg = str(first_err)
 
     # ── Retry once ──────────────────────────────────────────────────────
-    retry_prompt = CLASSIFICATION_RETRY_PROMPT.format(error=str(first_err))
+    retry_prompt = CLASSIFICATION_RETRY_PROMPT.format(error=first_err_msg)
     raw_retry = _call_llm(CLASSIFICATION_SYSTEM_PROMPT, retry_prompt)
     raw_retry = _strip_json_fences(raw_retry)
 
@@ -176,7 +176,7 @@ def classify_node(state: PipelineState) -> dict:
         return {
             "error": (
                 f"Classification failed after retry. "
-                f"First error: {first_err}  |  Retry error: {second_err}"
+                f"First error: {first_err_msg}  |  Retry error: {second_err}"
             )
         }
 

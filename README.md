@@ -22,6 +22,7 @@ This creates a structural guarantee: the synthesis engine cannot "creatively rei
   - `missing`: Explicitly missing data; the model is constrained to output `null` rather than guessing.
 - **Risk Flagging Constraints:** Identifies concerning patterns (e.g., extreme fatigue) but is strictly prohibited from using clinical/diagnostic language (e.g., "depression").
 - **No Cross-Day Carryforward:** Explicitly prevents the model from lazily assuming a metric from Day 3 still applies on Day 4 if unstated.
+- **Real-time Streaming UX:** Uses Server-Sent Events (SSE) to push progress updates to the frontend during the two-stage pipeline, avoiding long loading freezes.
 - **Coach Override UI:** The frontend allows coaches to formally ✓ Approve, ✎ Edit, or ✕ Reject any generated card.
 
 ## 🛠️ Tech Stack

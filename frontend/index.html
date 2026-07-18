@@ -578,9 +578,6 @@ async function analyze() {
   showProgress('extract');
 
   try {
-    // Simulate a brief delay for Stage 1 visual feedback
-    setTimeout(() => showProgress('classify'), 2000);
-
     const res = await fetch(`${API_BASE}/analyze`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -592,9 +589,44 @@ async function analyze() {
       throw new Error(err.detail || `HTTP ${res.status}`);
     }
 
-    showProgress('done');
-    const report = await res.json();
-    renderReport(report);
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop(); // Keep the last incomplete line in the buffer
+      
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          const dataStr = line.substring(6);
+          if (!dataStr) continue;
+          
+          try {
+            const data = JSON.parse(dataStr);
+            if (data.status === 'extracting') {
+              showProgress('extract');
+            } else if (data.status === 'classifying') {
+              showProgress('classify');
+            } else if (data.status === 'error') {
+              throw new Error(data.message);
+            } else if (data.status === 'complete') {
+              showProgress('done');
+              renderReport(data.report_json);
+            }
+          } catch (e) {
+            // Ignore partial JSON parse errors just in case, but rethrow real errors
+            if (!e.message.includes("JSON")) {
+               throw e;
+            }
+          }
+        }
+      }
+    }
   } catch (err) {
     showError(err.message);
   } finally {

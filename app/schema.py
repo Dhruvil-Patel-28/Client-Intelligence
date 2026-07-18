@@ -23,11 +23,20 @@ class ExtractedClaim(BaseModel):
 
 
 # ── Stage 2: Synthesis building blocks ──────────────────────────────────────
+from pydantic import BaseModel, field_validator
+
 class Field(BaseModel):
     value: Optional[str] = None
     status: Status
     evidence: list[str] = []
     confidence: Literal["high", "medium", "low"] = "medium"
+
+    @field_validator("status", mode="before")
+    @classmethod
+    def sanitize_status(cls, v: str) -> str:
+        if isinstance(v, str):
+            return v.replace("-", "_")
+        return v
 
 
 class DailyLog(BaseModel):
