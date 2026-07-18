@@ -201,8 +201,28 @@
       background: var(--border);
       transition: background 0.3s;
     }
-    .progress-step.active .dot { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+    @keyframes pulse-ring {
+      0% { box-shadow: 0 0 0 0 rgba(100, 108, 255, 0.7); }
+      70% { box-shadow: 0 0 0 10px rgba(100, 108, 255, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(100, 108, 255, 0); }
+    }
+    .progress-step.active .dot { 
+      background: var(--accent); 
+      animation: pulse-ring 1.5s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+    }
     .progress-step.done .dot { background: var(--green); }
+    .progress-desc {
+      margin-top: 1.25rem;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      text-align: center;
+      font-style: italic;
+      animation: fadeInOut 2s infinite;
+    }
+    @keyframes fadeInOut {
+      0%, 100% { opacity: 0.6; }
+      50% { opacity: 1; }
+    }
     .progress-connector {
       flex: 1;
       height: 1px;
@@ -515,6 +535,7 @@
         <span class="dot"></span> Complete
       </div>
     </div>
+    <div class="progress-desc" id="progress-desc">Initializing analysis pipeline...</div>
   </div>
 
   <!-- ── Error Banner ────────────────────────────────────────────────── -->
@@ -855,17 +876,34 @@ function setLoading(on) {
   }
 }
 
-function showProgress(stage) {
+function showProgress(step) {
+  document.getElementById('progress-bar').classList.add('active');
   const steps = ['extract', 'classify', 'done'];
-  const idx = steps.indexOf(stage);
-  for (let i = 0; i < steps.length; i++) {
-    const el = document.getElementById(`step-${steps[i]}`);
-    el.classList.remove('active', 'done');
-    if (i < idx) el.classList.add('done');
-    else if (i === idx) el.classList.add('active');
+  const descEl = document.getElementById('progress-desc');
+  
+  if (step === 'extract') {
+    descEl.textContent = 'Agent is reading transcript to extract atomic, quote-backed claims...';
+  } else if (step === 'classify') {
+    descEl.textContent = 'Agent is synthesizing extracted claims into the final structured report...';
+  } else if (step === 'done') {
+    descEl.textContent = 'Report generation complete!';
+    descEl.style.animation = 'none';
+    descEl.style.opacity = '1';
+    descEl.style.color = 'var(--green)';
   }
-}
 
+  let past = true;
+  steps.forEach(s => {
+    const el = document.getElementById(`step-${s}`);
+    el.classList.remove('active', 'done');
+    if (s === step) {
+      el.classList.add('active');
+      past = false;
+    } else if (past) {
+      el.classList.add('done');
+    }
+  });
+}
 function showError(msg) {
   const el = document.getElementById('error-banner');
   el.textContent = '⚠ ' + msg;
