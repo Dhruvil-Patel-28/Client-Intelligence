@@ -12,7 +12,7 @@ import json
 import os
 from typing import TypedDict
 
-import anthropic
+from groq import Groq
 from dotenv import load_dotenv
 from langgraph.graph import StateGraph, END
 
@@ -28,9 +28,9 @@ from app.schema import ExtractedClaim, ClientIntelligenceReport
 
 load_dotenv()
 
-# ── Anthropic client ────────────────────────────────────────────────────────
-_client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
-MODEL = "claude-sonnet-4-6"
+# ── Groq client ─────────────────────────────────────────────────────────────
+_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+MODEL = "llama-3.3-70b-versatile"
 
 
 # ── Graph state ─────────────────────────────────────────────────────────────
@@ -42,15 +42,17 @@ class PipelineState(TypedDict):
 
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
-def _call_anthropic(system: str, user: str, max_tokens: int = 8192) -> str:
-    """Send a single message to the Anthropic API and return the text."""
-    response = _client.messages.create(
+def _call_llm(system: str, user: str, max_tokens: int = 8192) -> str:
+    """Send a single message to the Groq API and return the text."""
+    response = _client.chat.completions.create(
         model=MODEL,
         max_tokens=max_tokens,
-        system=system,
-        messages=[{"role": "user", "content": user}],
+        messages=[
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ],
     )
-    return response.content[0].text.strip()
+    return response.choices[0].message.content.strip()
 
 
 def _strip_json_fences(text: str) -> str:
@@ -75,7 +77,7 @@ def extract_node(state: PipelineState) -> dict:
     transcript = state["transcript"]
     user_prompt = EXTRACTION_USER_PROMPT.format(transcript=transcript)
 
-    raw = _call_anthropic(EXTRACTION_SYSTEM_PROMPT, user_prompt)
+    raw = _call_llm(EXTRACTION_SYSTEM_PROMPT, user_prompt)
     raw = _strip_json_fences(raw)
 
     # First parse attempt
@@ -89,7 +91,7 @@ def extract_node(state: PipelineState) -> dict:
 
     # ── Retry once ──────────────────────────────────────────────────────
     retry_prompt = EXTRACTION_RETRY_PROMPT.format(error=str(first_err))
-    raw_retry = _call_anthropic(EXTRACTION_SYSTEM_PROMPT, retry_prompt)
+    raw_retry = _call_llm(EXTRACTION_SYSTEM_PROMPT, retry_prompt)
     raw_retry = _strip_json_fences(raw_retry)
 
     try:
@@ -119,7 +121,7 @@ def classify_node(state: PipelineState) -> dict:
     claims_json = state["claims_json"]
     user_prompt = CLASSIFICATION_USER_PROMPT.format(claims_json=claims_json)
 
-    raw = _call_anthropic(CLASSIFICATION_SYSTEM_PROMPT, user_prompt, max_tokens=8192)
+    raw = _call_llm(CLASSIFICATION_SYSTEM_PROMPT, user_prompt, max_tokens=8192)
     raw = _strip_json_fences(raw)
 
     # First parse attempt
@@ -133,7 +135,7 @@ def classify_node(state: PipelineState) -> dict:
 
     # ── Retry once ──────────────────────────────────────────────────────
     retry_prompt = CLASSIFICATION_RETRY_PROMPT.format(error=str(first_err))
-    raw_retry = _call_anthropic(CLASSIFICATION_SYSTEM_PROMPT, retry_prompt)
+    raw_retry = _call_llm(CLASSIFICATION_SYSTEM_PROMPT, retry_prompt)
     raw_retry = _strip_json_fences(raw_retry)
 
     try:
