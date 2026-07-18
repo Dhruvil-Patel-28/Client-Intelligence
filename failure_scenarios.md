@@ -84,7 +84,7 @@ This document catalogs the key failure modes of the Client Intelligence Analyzer
 
 ## 8. API Rate Limits or Network Failures
 
-**Scenario:** The Anthropic API returns a rate-limit error (429) or the network connection drops.
+**Scenario:** The Groq API returns a rate-limit error (429) or the network connection drops.
 
 **Mitigation:**
 - Currently: the error propagates to the FastAPI endpoint, which returns a 500 with the error detail, displayed in the UI.
@@ -97,7 +97,7 @@ This document catalogs the key failure modes of the Client Intelligence Analyzer
 **Scenario:** A transcript exceeds the model's context window, causing truncation or errors.
 
 **Mitigation:**
-- Currently: no explicit length check. The Anthropic API will return an error if the input exceeds limits.
+- Currently: no explicit length check. The Groq API will return an error if the input exceeds limits.
 - **Future improvement:** Add a pre-flight token count check and either warn the user or chunk the transcript into segments processed independently.
 
 ---

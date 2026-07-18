@@ -46,7 +46,7 @@ source venv/bin/activate
 pip install -r requirements.txt
 
 # 3. Configure API key
-echo "ANTHROPIC_API_KEY=your-key-here" > .env
+echo "GROQ_API_KEY=your-key-here" > .env
 
 # 4. Start the backend
 uvicorn app.main:app --reload
