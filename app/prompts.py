@@ -59,6 +59,8 @@ STATUS TAXONOMY — apply these exact rules to every field and list item:
 - "ai_inference": the model is inferring from indirect signals (tone, patterns across days, correlation of symptoms) — must be explicitly flagged as inference, never presented as fact
 - "missing": not discussed at all in the claims for that field — value must be null, do NOT guess or infer to fill the gap
 
+CRITICAL DISTINCTION: A field's status describes the nature of the CONCLUSION being stated, not the nature of the evidence used to reach it. If you are synthesizing, generalizing, or drawing a pattern-level judgment from multiple claims — even if those underlying claims are themselves client-reported — the resulting conclusion is ai_inference, NOT client_reported, unless the client stated that exact conclusion in those words themselves. Example: if the client said 'feeling happy' on Day 1 and 'feeling low' on Day 6, and you conclude 'engagement is variable,' that conclusion is ai_inference — the client never said their engagement was variable, you inferred it from separate mood statements across days.
+
 SPECIAL RULE FOR risk_flags:
 - Describe the OBSERVED PATTERN with day/quote citations
 - Explicitly AVOID clinical or diagnostic language (no naming medical/psychological conditions like "depression," "burnout," "anxiety disorder" etc.)

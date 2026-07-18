@@ -25,6 +25,12 @@ The four-level status system (`confirmed_fact`, `client_reported`, `ai_inference
 
 Risk flags deliberately avoid clinical/diagnostic language. The model describes **observed patterns** with citations and flags them for coach attention. This prevents the AI from overstepping into clinical territory while still surfacing important patterns.
 
+## Model Used
+
+The submitted prototype runs on **llama-3.3-70b-versatile via Groq** (not Claude as in earlier drafts). This was a deliberate test to validate whether the two-stage architecture's structural guarantees hold across different underlying models — not just prompt-level guarantees, which are more model-dependent.
+
+Testing confirmed that the STRUCTURAL parts of the design (stage separation, schema enforcement, retry logic, avoiding silent carryforwards) are model-agnostic and passed identically to expectations regardless of model. However, testing also revealed model-specific weaknesses in extraction completeness (Llama dropped a single-line Accountability Coach message) and epistemic reasoning (misclassifying an AI inference as a client report) — both of which are now mitigated in the codebase and documented in `failure_scenarios.md`.
+
 ## Running the Prototype
 
 ```bash
@@ -61,3 +67,4 @@ uvicorn app.main:app --reload
 - Build a coach review workflow with approval state management
 - Add export capabilities (PDF, structured JSON)
 - Implement token counting and cost estimation before analysis
+- Multi-model evaluation harness — run the same transcript through multiple models (Claude, GPT, Llama) and diff outputs to catch model-specific extraction/classification gaps before deployment, rather than discovering them ad hoc.

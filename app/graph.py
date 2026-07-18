@@ -11,6 +11,7 @@ transcript, which structurally prevents ungrounded hallucination at synthesis ti
 import json
 import os
 from typing import TypedDict
+from collections import defaultdict
 
 from groq import Groq
 from dotenv import load_dotenv
@@ -68,6 +69,33 @@ def _strip_json_fences(text: str) -> str:
 
 
 # ── STAGE 1: Extraction node ───────────────────────────────────────────────
+def _check_extraction_coverage(transcript: str, claims_data: list):
+    """
+    Simple heuristic coverage check to detect silent extraction omissions.
+    Compares transcript lines per day/speaker to extracted claims.
+    """
+    transcript_counts = defaultdict(lambda: defaultdict(int))
+    current_day = "Unknown"
+    for line in transcript.split("\n"):
+        line = line.strip()
+        if line.lower().startswith("day "):
+            current_day = line
+        else:
+            for speaker in ["Client:", "Coach:", "Accountability Coach:"]:
+                if line.startswith(speaker):
+                    sp = speaker[:-1] # remove colon
+                    transcript_counts[current_day][sp] += 1
+                    
+    claims_counts = defaultdict(lambda: defaultdict(int))
+    for c in claims_data:
+        claims_counts[c.get("day")][c.get("speaker")] += 1
+        
+    for day, speakers in transcript_counts.items():
+        for speaker, line_count in speakers.items():
+            c_count = claims_counts[day][speaker]
+            if line_count > 0 and c_count == 0:
+                print(f"⚠️ WARNING [Coverage Check]: {day} - {speaker} had {line_count} line(s) in transcript but 0 claims were extracted.")
+
 def extract_node(state: PipelineState) -> dict:
     """
     Extract discrete claims from the raw transcript.
@@ -85,6 +113,7 @@ def extract_node(state: PipelineState) -> dict:
         claims_data = json.loads(raw)
         # Validate each claim against the schema
         _ = [ExtractedClaim(**c) for c in claims_data]
+        _check_extraction_coverage(transcript, claims_data)
         return {"claims_json": json.dumps(claims_data, ensure_ascii=False)}
     except (json.JSONDecodeError, Exception) as first_err:
         pass
@@ -97,6 +126,7 @@ def extract_node(state: PipelineState) -> dict:
     try:
         claims_data = json.loads(raw_retry)
         _ = [ExtractedClaim(**c) for c in claims_data]
+        _check_extraction_coverage(transcript, claims_data)
         return {"claims_json": json.dumps(claims_data, ensure_ascii=False)}
     except (json.JSONDecodeError, Exception) as second_err:
         return {

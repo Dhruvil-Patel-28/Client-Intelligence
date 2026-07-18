@@ -15,14 +15,13 @@ This document catalogs the key failure modes of the Client Intelligence Analyzer
 
 ---
 
-## 2. Hallucination: Model Invents Data Not in the Transcript
+## 2. Silent Extraction Omission (Observed)
 
-**Scenario:** The model fabricates metrics, quotes, or claims that don't appear in the source transcript.
+**Scenario:** The Day 7 "Accountability Coach: Tried calling you. Please update when free." line was dropped entirely during extraction on llama-3.3-70b-versatile — zero claims were produced for it, with no error, warning, or downstream signal that anything was missing.
 
-**Mitigation:**
-- **Structural control (primary):** The two-stage LangGraph pipeline enforces that the classification/synthesis node (Stage 2) NEVER sees the raw transcript. It receives only the extracted claims from Stage 1. This means any hallucination at Stage 2 can only draw from already-extracted, quote-backed claims — not from "creative" reinterpretation of the transcript.
-- **Prompt-level control (secondary):** Stage 1's system prompt explicitly prohibits summarization, inference, and cross-day data carryforward. Stage 2's system prompt requires every field value to be backed by evidence from the claims.
-- **Quote mandate:** Every extracted claim requires a `quote` field with a near-verbatim transcript excerpt, making fabrication auditable.
+**Why this is severe:** A mislabeled claim is still visible and can be caught by review; an omitted claim leaves no trace anywhere in the pipeline, so neither Stage 2 nor a human reviewer has any way to know information was lost.
+
+**Mitigation added:** A coverage-check warning in `extract_node` comparing transcript line count to extracted claim count per day/speaker, to surface likely omissions for developer review. Note this is a detection aid, not a guarantee — full mitigation would require deterministic extraction validation or multi-pass extraction.
 
 ---
 
@@ -34,6 +33,8 @@ This document catalogs the key failure modes of the Client Intelligence Analyzer
 - Stage 1 prompt explicitly states: "Do NOT carry forward a value from a previous day unless it is explicitly restated in that day's text."
 - Stage 2 enforces `null` for daily_log fields not present in the claims.
 - The `"missing"` status taxonomy ensures unfilled fields are flagged as missing, not guessed.
+
+**Note:** VERIFIED — tested against Day 2/Day 4 water and sleep fields; confirmed null in both cases, no carryforward from Day 3's Accountability Coach log.
 
 ---
 
@@ -55,16 +56,17 @@ This document catalogs the key failure modes of the Client Intelligence Analyzer
 - Stage 2 system prompt contains an explicit prohibition: "Explicitly AVOID clinical or diagnostic language (no naming medical/psychological conditions like 'depression,' 'burnout,' 'anxiety disorder' etc.)"
 - The prompt instructs framing as pattern observations for coach assessment, not diagnoses.
 
+**Note:** VERIFIED — actual risk flag output used phrases like 'pattern across days 1-7: fatigue, bloating, and low mood — flagged for coach attention' with zero clinical terminology.
+
 ---
 
-## 6. Status Misclassification
+## 6. Engagement Level Status Misclassification (Observed)
 
-**Scenario:** The model labels an AI inference as a "confirmed_fact" or fills a missing field instead of marking it as "missing."
+**Scenario:** `engagement_level` was tagged `client_reported` with value "variable, with client reporting ups and downs in energy and mood," citing quotes like "Generally feeling happy today" — but no such conclusion was ever stated by the client themselves.
 
-**Mitigation:**
-- The status taxonomy is defined with exact rules in the system prompt, with examples for each category.
-- The frontend groups results BY STATUS, making misclassification immediately visible to the reviewer.
-- Approve/Edit/Reject buttons allow the coach to override any classification locally.
+**Root cause:** The model conflated the evidentiary basis (self-reported mood statements) with the nature of the conclusion (a synthesized pattern judgment), incorrectly treating a derived generalization as if it were a direct quote.
+
+**Fix applied:** Added an explicit rule distinguishing conclusion-type from evidence-type in the classification prompt (CRITICAL DISTINCTION). Re-verified status now returns `ai_inference`.
 
 ---
 
