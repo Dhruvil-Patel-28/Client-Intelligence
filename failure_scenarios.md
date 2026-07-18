@@ -72,7 +72,7 @@ This document catalogs the key failure modes of the Client Intelligence Analyzer
 
 ---
 
-## 6. Engagement Level Status Misclassification (Observed)
+## 7. Engagement Level Status Misclassification (Observed)
 
 **Scenario:** `engagement_level` was tagged `client_reported` with value "variable, with client reporting ups and downs in energy and mood," citing quotes like "Generally feeling happy today" — but no such conclusion was ever stated by the client themselves.
 
@@ -82,7 +82,7 @@ This document catalogs the key failure modes of the Client Intelligence Analyzer
 
 ---
 
-## 7. API Rate Limits or Network Failures
+## 8. API Rate Limits or Network Failures
 
 **Scenario:** The Anthropic API returns a rate-limit error (429) or the network connection drops.
 
@@ -92,7 +92,7 @@ This document catalogs the key failure modes of the Client Intelligence Analyzer
 
 ---
 
-## 8. Extremely Long Transcripts
+## 9. Extremely Long Transcripts
 
 **Scenario:** A transcript exceeds the model's context window, causing truncation or errors.
 
@@ -102,7 +102,7 @@ This document catalogs the key failure modes of the Client Intelligence Analyzer
 
 ---
 
-## 9. Pydantic Validation Failure
+## 10. Pydantic Validation Failure
 
 **Scenario:** The LLM returns syntactically valid JSON that doesn't match the expected schema (e.g., missing required fields, wrong types).
 
@@ -112,7 +112,7 @@ This document catalogs the key failure modes of the Client Intelligence Analyzer
 
 ---
 
-## 10. Frontend State Inconsistency
+## 11. Frontend State Inconsistency
 
 **Scenario:** User approves/edits/rejects cards but the state is lost on page refresh.
 
