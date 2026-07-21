@@ -9,9 +9,10 @@ Endpoints:
 import json
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+import os
 
 from app.graph import graph
 from app.sample_transcript import SAMPLE_TRANSCRIPT
@@ -36,6 +37,14 @@ app.add_middleware(
 class AnalyzeRequest(BaseModel):
     transcript: str
 
+
+# ── Root endpoint for frontend ────────────────────────────────────────────────
+@app.get("/")
+def serve_frontend():
+    # Construct the path to the frontend index.html relative to this file
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    file_path = os.path.join(base_dir, "frontend", "index.html")
+    return FileResponse(file_path)
 
 # ── POST /analyze ───────────────────────────────────────────────────────────
 @app.post("/analyze")
