@@ -6,15 +6,20 @@ A GenAI product prototype that takes a raw client-coach wellness conversation tr
 
 The core innovation of this project is not prompt engineering — it is **architectural separation**. 
 
-LLMs hallucinate most when given rich, unstructured context and asked to simultaneously extract and interpret. This project uses a two-stage LangGraph pipeline:
+LLMs hallucinate most when given rich, unstructured context and asked to simultaneously extract and interpret. This project uses a three-stage LangGraph pipeline:
 
 1. **Stage 1 (Extraction Node):** Reads the raw transcript and extracts a structured JSON array of atomic, quote-backed claims. It is explicitly forbidden from summarizing or inferring.
 2. **Stage 2 (Classification Node):** Synthesizes the final intelligence report. **Crucially, Stage 2 never receives the raw transcript.** It can only build the report using the claims array produced by Stage 1.
+3. **Stage 3 (Validation Node):** Acts as an automated judge. It reviews the draft report to ensure no clinical language or hallucinated cross-day carryforwards sneaked in. If it fails, it rejects the draft back to Stage 2 with feedback for an auto-correction rewrite.
 
-This creates a structural guarantee: the synthesis engine cannot "creatively reinterpret" the source text because it simply cannot see it. If a fact wasn't extracted with a supporting quote in Stage 1, it cannot appear in the final report in Stage 2.
+This creates a structural guarantee: the synthesis engine cannot "creatively reinterpret" the source text because it simply cannot see it, and the validation node acts as a strict guardrail before the user ever sees the output.
 
 ## ✨ Key Features
 
+- **Auto-Correction Agent Loop:** A 3rd LLM node automatically reviews and loops back to fix hallucinations or clinical language before the user sees the output.
+- **Interactive Evidence Grounding:** Clicking on any extracted quote in the UI instantly scrolls to and highlights the verbatim sentence in the original transcript.
+- **Draft Reply Generation:** Auto-drafts an empathetic WhatsApp/SMS message for the coach based on the intelligence and recommended next actions.
+- **Visual Trend Sparklines:** Converts basic text tables into visual CSS progress bars for steps, water, and sleep.
 - **Epistemic Status Taxonomy:** Results are grouped by confidence, not just by category.
   - `confirmed_fact`: Objective logged metrics (e.g., from an Accountability Coach).
   - `client_reported`: Client estimates and self-reported symptoms.
@@ -22,7 +27,7 @@ This creates a structural guarantee: the synthesis engine cannot "creatively rei
   - `missing`: Explicitly missing data; the model is constrained to output `null` rather than guessing.
 - **Risk Flagging Constraints:** Identifies concerning patterns (e.g., extreme fatigue) but is strictly prohibited from using clinical/diagnostic language (e.g., "depression").
 - **No Cross-Day Carryforward:** Explicitly prevents the model from lazily assuming a metric from Day 3 still applies on Day 4 if unstated.
-- **Real-time Streaming UX:** Uses Server-Sent Events (SSE) to push progress updates to the frontend during the two-stage pipeline, avoiding long loading freezes.
+- **Real-time Streaming UX:** Uses Server-Sent Events (SSE) to push progress updates to the frontend during the multi-stage pipeline, avoiding long loading freezes.
 - **Coach Override UI:** The frontend allows coaches to formally ✓ Approve, ✎ Edit, or ✕ Reject any generated card.
 
 ## 🛠️ Tech Stack
@@ -72,8 +77,8 @@ Client_Intelligence/
 ├── app/
 │   ├── schema.py              # Pydantic data contracts (Input/Output validation)
 │   ├── prompts.py             # System & User prompt templates
-│   ├── graph.py               # The two-stage LangGraph pipeline
-│   ├── main.py                # FastAPI server and endpoints
+│   ├── graph.py               # The three-stage LangGraph pipeline (extract, classify, validate)
+│   ├── main.py                # FastAPI server and endpoints (SSE streaming)
 │   └── sample_transcript.py   # Hardcoded 8-day edge-case transcript
 ├── frontend/
 │   └── index.html             # Single-file UI with state management

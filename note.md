@@ -4,12 +4,13 @@
 
 This prototype demonstrates a **structurally-enforced hallucination control** pattern for GenAI applications, rather than relying solely on prompt engineering.
 
-### Why Two Stages?
+### Why Three Stages?
 
-The core insight is that LLMs hallucinate most when they have access to rich, unstructured context and are asked to both extract and interpret simultaneously. By splitting extraction and synthesis into two separate LangGraph nodes with a strict data boundary:
+The core insight is that LLMs hallucinate most when they have access to rich, unstructured context and are asked to both extract and interpret simultaneously. By splitting the workflow into three separate LangGraph nodes with strict data boundaries:
 
 1. **Stage 1 (Extraction)** sees the raw transcript and must produce only atomic, quote-backed claims — no interpretation allowed.
 2. **Stage 2 (Synthesis)** sees ONLY the extracted claims — never the raw transcript. It cannot "creatively reinterpret" the source because it never sees it.
+3. **Stage 3 (Validation)** acts as an automated judge. It reviews the draft report, catches clinical language or hallucinated cross-day carryforwards, and forces Stage 2 to rewrite the report until it passes.
 
 This is analogous to a compiler's separate lexing and parsing phases: by constraining what each stage can see and produce, we get structural guarantees that no single prompt can provide.
 
@@ -23,7 +24,7 @@ The four-level status system (`confirmed_fact`, `client_reported`, `ai_inference
 
 ### Real-Time UX (SSE Streaming)
 
-The LangGraph pipeline takes several seconds to run due to the two distinct LLM calls. To prevent a frozen UI, the FastAPI backend streams progress using Server-Sent Events (SSE). By intercepting the graph execution midway, the frontend dynamically transitions from "Extracting" to "Synthesizing" to provide real-time visibility into the agentic workflow.
+The LangGraph pipeline takes several seconds to run due to the distinct LLM calls (extraction, synthesis, and potentially multiple validation loopbacks). To prevent a frozen UI, the FastAPI backend streams progress using Server-Sent Events (SSE). By intercepting the graph execution midway, the frontend dynamically transitions from "Extracting" to "Synthesizing" to "Validating" to provide real-time visibility into the agentic workflow.
 
 ### Risk Flag Design
 
