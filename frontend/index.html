@@ -718,7 +718,8 @@ function renderCoachReply(text) {
 // ── Daily Table & Sparklines ──────────────────────────────────────────────
 function parseNum(str) {
   if (!str) return 0;
-  const m = str.match(/[\d.]+/);
+  const cleaned = str.replace(/,/g, '');
+  const m = cleaned.match(/[\d.]+/);
   return m ? parseFloat(m[0]) : 0;
 }
 function renderSparkline(val, maxVal) {
