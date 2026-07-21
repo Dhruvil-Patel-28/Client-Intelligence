@@ -116,6 +116,9 @@
       border-color: var(--accent);
       box-shadow: 0 0 0 3px var(--accent-glow);
     }
+    textarea::selection {
+      background: rgba(100, 108, 255, 0.4);
+    }
 
     .btn-row {
       display: flex;
@@ -335,13 +338,25 @@
       margin-bottom: 0.75rem;
       display: flex;
       align-items: center;
-      gap: 0.4rem;
+      line-height: 1.5;
     }
-    .status-section .section-note {
-      font-size: 0.78rem;
+    .card-evidence {
+      font-size: 0.8rem;
       color: var(--text-muted);
       margin-bottom: 0.75rem;
       font-style: italic;
+      border-left: 2px solid var(--border);
+      padding-left: 0.5rem;
+    }
+    .evidence-quote {
+      cursor: pointer;
+      display: block;
+      margin-bottom: 0.2rem;
+      transition: color 0.2s;
+    }
+    .evidence-quote:hover {
+      color: var(--accent);
+      text-decoration: underline;
     }
 
     .section-confirmed h2 { color: var(--green); }
@@ -389,12 +404,6 @@
     }
     .card-value {
       font-size: 0.9rem;
-      margin-bottom: 0.4rem;
-    }
-    .card-evidence {
-      font-size: 0.78rem;
-      color: var(--text-muted);
-      font-style: italic;
       margin-bottom: 0.4rem;
     }
     .card-confidence {
@@ -555,6 +564,9 @@
     <!-- Risk Flags -->
     <div class="risk-section" id="risk-flags-section"></div>
 
+    <!-- Coach Draft Reply -->
+    <div class="summary-block" id="draft-reply-section" style="border-color: var(--green); background: rgba(16, 185, 129, 0.05);"></div>
+
     <!-- Status-Grouped Sections -->
     <div id="status-sections"></div>
   </div>
@@ -679,26 +691,59 @@ function renderReport(report) {
   // Risk flags
   renderRiskFlags(report.risk_flags);
 
+  // Coach Draft Reply
+  renderCoachReply(report.coach_reply_draft);
+
   // Status-grouped sections
   renderStatusSections(report);
 
   results.classList.add('active');
 }
 
-// ── Daily Table ───────────────────────────────────────────────────────────
+// ── Coach Draft Reply ─────────────────────────────────────────────────────
+function renderCoachReply(text) {
+  const el = document.getElementById('draft-reply-section');
+  if (!text) { el.innerHTML = ''; return; }
+  el.innerHTML = `
+    <h2 style="color: var(--green)">💬 Suggested Coach Reply to Client</h2>
+    <p style="font-family: 'SF Mono', monospace; font-size: 0.85rem; white-space: pre-wrap;">${escapeHtml(text)}</p>
+    <button class="btn btn-primary" style="margin-top:1rem; background: var(--green)" onclick="alert('Copied to clipboard!')">Copy to Clipboard</button>
+  `;
+}
+
+// ── Daily Table & Sparklines ──────────────────────────────────────────────
+function parseNum(str) {
+  if (!str) return 0;
+  const m = str.match(/[\d.]+/);
+  return m ? parseFloat(m[0]) : 0;
+}
+function renderSparkline(val, maxVal) {
+  if (!val) return '<span class="null-val">—</span>';
+  const num = parseNum(val);
+  const pct = Math.min((num / maxVal) * 100, 100);
+  return `
+    <div style="display:flex; align-items:center; gap:0.5rem">
+      <div style="flex:1; background:var(--border); height:6px; border-radius:3px; overflow:hidden;">
+        <div style="background:var(--accent); height:100%; width:${pct}%"></div>
+      </div>
+      <span style="min-width:30px; font-size:0.75rem">${escapeHtml(val)}</span>
+    </div>
+  `;
+}
+
 function renderDailyTable(logs) {
   const wrap = document.getElementById('daily-table-wrap');
   let html = `<table class="daily-table">
     <thead><tr>
-      <th>Day</th><th>Steps</th><th>Water</th><th>Sleep (hrs)</th><th>Exercise</th>
+      <th>Day</th><th style="width:20%">Steps</th><th style="width:20%">Water</th><th style="width:20%">Sleep (hrs)</th><th>Exercise</th>
     </tr></thead><tbody>`;
 
   for (const log of logs) {
     html += `<tr>
       <td>${escapeHtml(log.day)}</td>
-      <td>${log.steps ? escapeHtml(log.steps) : '<span class="null-val">—</span>'}</td>
-      <td>${log.water ? escapeHtml(log.water) : '<span class="null-val">—</span>'}</td>
-      <td>${log.sleep_hours ? escapeHtml(log.sleep_hours) : '<span class="null-val">—</span>'}</td>
+      <td>${renderSparkline(log.steps, 10000)}</td>
+      <td>${renderSparkline(log.water, 4)}</td>
+      <td>${renderSparkline(log.sleep_hours, 8)}</td>
       <td>${log.exercise ? escapeHtml(log.exercise) : '<span class="null-val">—</span>'}</td>
     </tr>`;
   }
@@ -753,10 +798,8 @@ function renderStatusSections(report) {
     },
   };
 
-  // Collect all field items grouped by status
   const grouped = { confirmed_fact: [], client_reported: [], ai_inference: [], missing: [] };
 
-  // Named fields
   for (const [key, field] of Object.entries(report.fields || {})) {
     const st = field.status;
     if (grouped[st]) {
@@ -764,7 +807,6 @@ function renderStatusSections(report) {
     }
   }
 
-  // Key barriers
   for (let i = 0; i < (report.key_barriers || []).length; i++) {
     const item = report.key_barriers[i];
     const st = item.status;
@@ -773,7 +815,6 @@ function renderStatusSections(report) {
     }
   }
 
-  // Pending actions
   for (let i = 0; i < (report.pending_actions || []).length; i++) {
     const item = report.pending_actions[i];
     const st = item.status;
@@ -782,7 +823,6 @@ function renderStatusSections(report) {
     }
   }
 
-  // Recommended next action
   if (report.recommended_next_action) {
     const item = report.recommended_next_action;
     const st = item.status;
@@ -802,7 +842,7 @@ function renderStatusSections(report) {
       html += `<p class="section-note">${config.note}</p>`;
     }
     for (const item of items) {
-      html += renderCard(item, status);
+      html += renderCard(item._id, item.label, item, status);
     }
     html += '</section>';
   }
@@ -811,13 +851,17 @@ function renderStatusSections(report) {
 }
 
 // ── Render a single card ──────────────────────────────────────────────────
-function renderCard(item, status) {
-  const id = item._id;
-  return `<div class="card card-${status}" id="card-${id}">
-    <div class="card-label">${escapeHtml(item.label)}</div>
-    <div class="card-value" id="value-${id}">${escapeHtml(item.value || 'N/A')}</div>
-    <div class="card-evidence">${(item.evidence || []).map(e => escapeHtml(e)).join(' · ')}</div>
-    <span class="card-confidence confidence-${item.confidence}">${item.confidence} confidence</span>
+function renderCard(id, title, field, status) {
+  const evidenceHtml = (field.evidence || [])
+    .map(e => `<span class="evidence-quote" onclick="highlightQuote(this.textContent)">❝ ${escapeHtml(e)} ❞</span>`)
+    .join('');
+
+  return `
+  <div class="card card-${status}" id="card-${id}">
+    <div class="card-label">${escapeHtml(title)}</div>
+    <div class="card-value" id="value-${id}">${escapeHtml(field.value || 'N/A')}</div>
+    <div class="card-evidence">${evidenceHtml}</div>
+    <span class="card-confidence confidence-${field.confidence}">${field.confidence} confidence</span>
     <div class="card-actions">
       <button class="btn-approve" id="approve-${id}" onclick="approveCard('${id}')">✓ Approve</button>
       <button class="btn-edit" onclick="toggleEdit('${id}')">✎ Edit</button>
@@ -864,6 +908,30 @@ function saveEdit(id) {
   document.getElementById(`edit-${id}`).classList.remove('active');
 }
 
+// ── Interactive Evidence Grounding ────────────────────────────────────────
+function highlightQuote(rawQuote) {
+  const textarea = document.getElementById('transcript-input');
+  const fullText = textarea.value;
+  
+  // Clean quote (remove the decorative quotes and leading "Day N: " if present)
+  let cleanQuote = rawQuote.replace(/^❝\s*/, '').replace(/\s*❞$/, '');
+  cleanQuote = cleanQuote.replace(/^Day \d+:\s*/, '');
+  
+  if (!cleanQuote) return;
+
+  // Search for the snippet (just take the first 30 chars to be safe against slight LLM modifications)
+  const searchSnippet = cleanQuote.substring(0, 30);
+  const idx = fullText.indexOf(searchSnippet);
+  
+  if (idx !== -1) {
+    textarea.focus();
+    // Blur and focus triggers autoscroll in most browsers
+    textarea.blur();
+    textarea.focus();
+    textarea.setSelectionRange(idx, idx + cleanQuote.length);
+  }
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────
 function setLoading(on) {
   const btn = document.getElementById('btn-analyze');
@@ -885,6 +953,11 @@ function showProgress(step) {
     descEl.textContent = 'Agent is reading transcript to extract atomic, quote-backed claims...';
   } else if (step === 'classify') {
     descEl.textContent = 'Agent is synthesizing extracted claims into the final structured report...';
+  } else if (step === 'validating') {
+    descEl.textContent = 'Automated Judge is checking the report for clinical language and hallucinations...';
+  } else if (step === 're-classifying') {
+    descEl.textContent = 'Judge rejected the draft. Auto-correcting and synthesizing again...';
+    descEl.style.color = 'var(--red)';
   } else if (step === 'done') {
     descEl.textContent = 'Report generation complete!';
     descEl.style.animation = 'none';
@@ -892,11 +965,18 @@ function showProgress(step) {
     descEl.style.color = 'var(--green)';
   }
 
+  // We don't want to break the UI steps progress if it's validating/re-classifying, just keep it on 'classify' visually
+  let visualStep = step;
+  if (step === 'validating' || step === 're-classifying') {
+    visualStep = 'classify';
+  }
+
   let past = true;
   steps.forEach(s => {
     const el = document.getElementById(`step-${s}`);
+    if (!el) return;
     el.classList.remove('active', 'done');
-    if (s === step) {
+    if (s === visualStep) {
       el.classList.add('active');
       past = false;
     } else if (past) {

@@ -66,12 +66,19 @@ def analyze(req: AnalyzeRequest):
                     if state_update.get("error"):
                         yield f"data: {json.dumps({'status': 'error', 'message': state_update['error']})}\n\n"
                         return
-                    
-                    if not state_update.get("report_json"):
-                        yield f"data: {json.dumps({'status': 'error', 'message': 'Pipeline completed but produced no report.'})}\n\n"
-                        return
-                        
-                    yield f"data: {json.dumps({'status': 'complete', 'report_json': json.loads(state_update['report_json'])})}\n\n"
+                    yield f"data: {json.dumps({'status': 'validating', 'message': 'Draft generated. Automated Judge checking for hallucinations...'})}\n\n"
+                
+                if "validate" in event:
+                    state_update = event["validate"]
+                    feedback = state_update.get("validation_feedback")
+                    if feedback:
+                        yield f"data: {json.dumps({'status': 're-classifying', 'message': f'Judge caught an error: {feedback}. Auto-correcting...'})}\n\n"
+                    else:
+                        # Validation passed (or max attempts reached)
+                        if not state_update.get("report_json"):
+                            yield f"data: {json.dumps({'status': 'error', 'message': 'Pipeline completed but produced no report.'})}\n\n"
+                            return
+                        yield f"data: {json.dumps({'status': 'complete', 'report_json': json.loads(state_update['report_json'])})}\n\n"
         except Exception as e:
             yield f"data: {json.dumps({'status': 'error', 'message': f'Server error: {str(e)}'})}\n\n"
 

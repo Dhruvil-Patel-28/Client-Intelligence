@@ -58,3 +58,4 @@ class ClientIntelligenceReport(BaseModel):
     pending_actions: list[Field]
     risk_flags: list[Field]
     recommended_next_action: Field
+    coach_reply_draft: str

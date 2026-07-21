@@ -97,7 +97,8 @@ OUTPUT FORMAT — strict JSON matching this schema exactly:
   "risk_flags": [
     { "value": "pattern description with citations", "status": "ai_inference", "evidence": ["day/quote"], "confidence": "high|medium|low" }
   ],
-  "recommended_next_action": { "value": "...", "status": "...", "evidence": ["..."], "confidence": "high|medium|low" }
+  "recommended_next_action": { "value": "...", "status": "...", "evidence": ["..."], "confidence": "high|medium|low" },
+  "coach_reply_draft": "Write an empathetic, ready-to-send WhatsApp/SMS draft for the coach to send to the client, based on the recommended next action and any missing data."
 }
 
 CRITICAL RULES:
@@ -117,3 +118,24 @@ CLASSIFICATION_RETRY_PROMPT = """Your previous response was not valid JSON. The 
 {error}
 
 Please return ONLY the corrected JSON for the ClientIntelligenceReport. No markdown fences, no commentary — just the raw JSON object."""
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STAGE 3: VALIDATION (AUTO-CORRECTION)
+# ─────────────────────────────────────────────────────────────────────────────
+
+VALIDATION_SYSTEM_PROMPT = """You are a strict automated judge evaluating a generated ClientIntelligenceReport.
+Your job is to check for two critical Hallucination constraints:
+1. NO CLINICAL/DIAGNOSTIC LANGUAGE: The report must not diagnose conditions (e.g., 'depression', 'burnout', 'insomnia', 'anxiety disorder').
+2. NO CROSS-DAY CARRYFORWARD: The daily_logs must not contain values that were just assumed from previous days (if they weren't explicitly stated that day).
+
+OUTPUT FORMAT — strict JSON:
+{
+  "is_valid": true | false,
+  "reason": "If false, explain exactly what rule was broken and where. If true, output 'Passed'."
+}
+
+Output ONLY the JSON object. No markdown fences, no commentary."""
+
+VALIDATION_USER_PROMPT = """Evaluate this report:
+
+{report_json}"""

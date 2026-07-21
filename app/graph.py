@@ -24,6 +24,8 @@ from app.prompts import (
     CLASSIFICATION_SYSTEM_PROMPT,
     CLASSIFICATION_USER_PROMPT,
     CLASSIFICATION_RETRY_PROMPT,
+    VALIDATION_SYSTEM_PROMPT,
+    VALIDATION_USER_PROMPT,
 )
 from app.schema import ExtractedClaim, ClientIntelligenceReport
 
@@ -38,8 +40,10 @@ MODEL = "llama-3.3-70b-versatile"
 class PipelineState(TypedDict):
     transcript: str
     claims_json: str          # serialised JSON array of claims
-    report_json: str          # serialised JSON of final report
-    error: str                # non-empty if pipeline failed
+    report_json: str          # serialised final report
+    error: str                # to capture fatal pipeline errors
+    validation_feedback: str  # feedback from validation node
+    validation_attempts: int  # prevent infinite loops
 
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
@@ -149,9 +153,15 @@ def classify_node(state: PipelineState) -> dict:
         return {}
 
     claims_json = state["claims_json"]
-    user_prompt = CLASSIFICATION_USER_PROMPT.format(claims_json=claims_json)
+    feedback = state.get("validation_feedback", "")
+    
+    # If we are retrying due to validation failure, append the judge's feedback
+    if feedback:
+        user_prompt = CLASSIFICATION_USER_PROMPT.format(claims_json=claims_json) + f"\n\nPREVIOUS ATTEMPT FAILED VALIDATION. JUDGE FEEDBACK:\n{feedback}\nFix the report accordingly."
+    else:
+        user_prompt = CLASSIFICATION_USER_PROMPT.format(claims_json=claims_json)
 
-    raw = _call_llm(CLASSIFICATION_SYSTEM_PROMPT, user_prompt, max_tokens=2000)
+    raw = _call_llm(CLASSIFICATION_SYSTEM_PROMPT, user_prompt, max_tokens=8192)
     raw = _strip_json_fences(raw)
 
     # First parse attempt
@@ -181,24 +191,61 @@ def classify_node(state: PipelineState) -> dict:
         }
 
 
+# ── Node: Validation (Auto-Correction) ──────────────────────────────────────
+def validation_node(state: PipelineState) -> dict:
+    """Stage 3: Acts as an automated judge to catch hallucinations or clinical language."""
+    # If we already have a hard error from classify, pass it through
+    if state.get("error"):
+        return {}
+
+    attempts = state.get("validation_attempts", 0) + 1
+    if attempts >= 3:
+        # Give up after 3 tries to avoid infinite loop
+        return {"validation_attempts": attempts, "validation_feedback": ""}
+
+    report_json = state["report_json"]
+    user_prompt = VALIDATION_USER_PROMPT.format(report_json=report_json)
+
+    raw = _call_llm(VALIDATION_SYSTEM_PROMPT, user_prompt, max_tokens=500)
+    raw = _strip_json_fences(raw)
+
+    try:
+        data = json.loads(raw)
+        if data.get("is_valid"):
+            return {"validation_attempts": attempts, "validation_feedback": "", "report_json": report_json}
+        else:
+            return {"validation_attempts": attempts, "validation_feedback": data.get("reason", "Unknown validation error"), "report_json": report_json}
+    except Exception as e:
+        # If the judge fails to return JSON, just let it pass rather than looping infinitely
+        return {"validation_attempts": attempts, "validation_feedback": "", "report_json": report_json}
+
+
 # ── Conditional edge: skip classify if extraction errored ───────────────────
 def _should_classify(state: PipelineState) -> str:
     if state.get("error"):
         return END
     return "classify"
 
+def _should_end(state: PipelineState) -> str:
+    if state.get("error"):
+        return END
+    if state.get("validation_feedback"):
+        return "classify"
+    return END
 
 # ── Build the graph ─────────────────────────────────────────────────────────
 def build_graph():
-    """Construct and compile the two-stage LangGraph pipeline."""
+    """Construct and compile the three-stage LangGraph pipeline."""
     builder = StateGraph(PipelineState)
 
     builder.add_node("extract", extract_node)
     builder.add_node("classify", classify_node)
+    builder.add_node("validate", validation_node)
 
     builder.set_entry_point("extract")
     builder.add_conditional_edges("extract", _should_classify, {"classify": "classify", END: END})
-    builder.add_edge("classify", END)
+    builder.add_edge("classify", "validate")
+    builder.add_conditional_edges("validate", _should_end, {"classify": "classify", END: END})
 
     return builder.compile()
 
