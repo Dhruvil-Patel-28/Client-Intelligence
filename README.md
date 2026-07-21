@@ -62,10 +62,9 @@ uvicorn app.main:app --reload
 The API will start at `http://localhost:8000`.
 
 ### 3. Open the UI
-Simply double-click the `frontend/index.html` file in your file explorer, or open it directly in your browser:
-```bash
-# macOS
-open frontend/index.html
+Because the backend serves the frontend directly, simply open your browser and navigate to:
+```text
+http://localhost:8000
 ```
 
 Click **"Load Sample Transcript"** to populate the 8-day test conversation, then click **"Analyze Transcript"**.

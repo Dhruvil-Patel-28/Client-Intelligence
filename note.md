@@ -53,7 +53,7 @@ echo "GROQ_API_KEY=your-key-here" > .env
 uvicorn app.main:app --reload
 
 # 5. Open the frontend
-# Open frontend/index.html in a browser
+# Navigate to http://localhost:8000 in your browser
 ```
 
 ## Limitations
