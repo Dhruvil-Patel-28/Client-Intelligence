@@ -537,7 +537,11 @@
       </div>
       <div class="progress-connector"></div>
       <div class="progress-step" id="step-classify">
-        <span class="dot"></span> Stage 2: Classifying & Synthesizing
+        <span class="dot"></span> Stage 2: Synthesis
+      </div>
+      <div class="progress-connector"></div>
+      <div class="progress-step" id="step-validate">
+        <span class="dot"></span> Stage 3: Judge
       </div>
       <div class="progress-connector"></div>
       <div class="progress-step" id="step-done">
@@ -572,7 +576,7 @@
   </div>
 
   <footer>
-    Client Intelligence Analyzer — Prototype · Structural hallucination control via two-stage LangGraph pipeline
+    Client Intelligence Analyzer — Prototype · Structural hallucination control via three-stage LangGraph pipeline
   </footer>
 </div>
 
@@ -946,7 +950,7 @@ function setLoading(on) {
 
 function showProgress(step) {
   document.getElementById('progress-bar').classList.add('active');
-  const steps = ['extract', 'classify', 'done'];
+  const steps = ['extract', 'classify', 'validate', 'done'];
   const descEl = document.getElementById('progress-desc');
   
   if (step === 'extract') {
@@ -965,10 +969,9 @@ function showProgress(step) {
     descEl.style.color = 'var(--green)';
   }
 
-  // We don't want to break the UI steps progress if it's validating/re-classifying, just keep it on 'classify' visually
   let visualStep = step;
   if (step === 'validating' || step === 're-classifying') {
-    visualStep = 'classify';
+    visualStep = 'validate';
   }
 
   let past = true;

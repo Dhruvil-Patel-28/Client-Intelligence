@@ -201,7 +201,7 @@ def validation_node(state: PipelineState) -> dict:
     attempts = state.get("validation_attempts", 0) + 1
     if attempts >= 3:
         # Give up after 3 tries to avoid infinite loop
-        return {"validation_attempts": attempts, "validation_feedback": ""}
+        return {"validation_attempts": attempts, "validation_feedback": "", "report_json": state.get("report_json", "")}
 
     report_json = state["report_json"]
     user_prompt = VALIDATION_USER_PROMPT.format(report_json=report_json)
